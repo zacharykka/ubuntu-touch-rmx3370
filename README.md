@@ -35,14 +35,20 @@ All commands run on the build machine from this directory.
    Halium 11 GSI and the Halium initrd, and checks them against
    `tools/inputs.sha256`. A dump of the stock boot partition must also be at
    `/root/ut-work/ref/boot.img`; only its kernel cmdline is reused.
-2. Kernel. Base: `cip-4.19.y-oos16` at `6367b2e38fca`.
+2. Kernel: branch `ut-bitra` of
+   [ubuntu-touch-rmx3370-kernel-src](https://github.com/zacharykka/ubuntu-touch-rmx3370-kernel-src),
+   a fork of `yassshhhhh15/android_kernel_realme_sm8250`.
 
    ```sh
-   git clone -b cip-4.19.y-oos16 https://github.com/yassshhhhh15/android_kernel_realme_sm8250 kernel-src
-   git -C kernel-src checkout -b bitra-ut 6367b2e38fca
-   git -C kernel-src am "$PWD"/patches/*.patch
+   git clone -b ut-bitra https://github.com/zacharykka/ubuntu-touch-rmx3370-kernel-src kernel-src
    tools/build_kernel.sh
    ```
+
+   `patches/` holds the same changes as a series on top of `6367b2e38fca`
+   (the base commit, kept on that branch; upstream `cip-4.19.y-oos16` has
+   since rewritten its last three commits). After changing the kernel,
+   re-export it with
+   `git -C kernel-src format-patch -o ../patches 6367b2e38fca..HEAD`.
 
    The config is `vendor/kona-perf_defconfig` plus
    `arch/arm64/configs/vendor/halium.config` (do not use `kona_defconfig`, see
