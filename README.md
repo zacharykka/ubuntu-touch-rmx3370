@@ -8,9 +8,39 @@ nothing is flashed.
 
 | Works | Not yet |
 |---|---|
-| boot to Lomiri, display | audio, modem and calls, camera, sensors |
+| boot to Lomiri, display | audio, modem and calls, sensors |
 | touch | USB networking and adb while Ubuntu Touch runs |
 | WiFi, IPv4 and IPv6 | AppArmor confinement (SELinux is the major LSM) |
+| click apps launch (terminal, camera, OpenStore, ...) | |
+
+## Security model
+
+This device trades the normal Ubuntu Touch application sandbox for a working
+display stack, and callers should understand what that means.
+
+- **AppArmor is off.** In this 4.19 tree SELinux and AppArmor are both
+  exclusive LSMs, so only the first one in `CONFIG_LSM` initialises. SELinux
+  has to win (the display composer needs selinuxfs, see the note below), which
+  leaves AppArmor uninitialised. Ubuntu Touch's per-click-app confinement is
+  built on AppArmor, so that sandbox does not exist here.
+- **SELinux does not confine the Ubuntu side.** It is the major LSM only so
+  that the Android container's `vndservicemanager` can register. No policy is
+  loaded for the Ubuntu userspace and the kernel runs SELinux permissive, so it
+  does not restrict Ubuntu Touch apps either.
+- **What is left is standard Unix DAC.** Apps run as the `phablet` user under
+  ordinary file permissions, like a normal desktop Linux session, with no
+  mobile-style per-app isolation. Treat OpenStore / third-party clicks
+  accordingly.
+- **Consequence for launching apps.** `lomiri-app-launch` starts every click
+  app through `aa-exec-click -p <profile> -- <app>`, which ends in
+  `aa-exec -p <profile>`. With AppArmor absent `aa-exec` aborts with "AppArmor
+  interface not available" and the app never execs. The overlay ships a patched
+  `/usr/bin/aa-exec-click` that, when AppArmor is unavailable, drops the
+  `-p <profile>` and execs the app unconfined (all other click environment is
+  still set up). On a kernel with AppArmor enabled the patch is a no-op and apps
+  are confined as before. Restoring the sandbox would require either LSM
+  stacking in the kernel or SELinux policy for the Ubuntu side; the
+  `apparmor-major-lsm` branch tracks the first of those.
 
 ## Layout
 
@@ -113,6 +143,9 @@ ext4, so stock Android loses its data. After this, never pick "format data" or
   in `/userdata/system-data/etc/systemd/system` overrides them.
 - The qcacld WLAN driver does nothing until "ON" is written to `/dev/wlan`
   (`bitra-wlan.service`).
+- Click apps launch unconfined because AppArmor is not initialised; the overlay
+  patches `/usr/bin/aa-exec-click` to drop `-p <profile>` in that case. See the
+  "Security model" section.
 - The vendor `init.qcom.usb.rc` would take over the USB controller. The lxc
   config binds an empty file over it (see `tools/make_ut_image.sh`).
 - The bootloader picks the DTB by `oplus,dtsi_no` = 21619 and refuses boot
