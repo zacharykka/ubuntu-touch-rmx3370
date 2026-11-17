@@ -1,0 +1,15 @@
+# realme GT Neo2 (bitra): load the vendor SELinux policy before the Android
+# container starts. See /usr/libexec/bitra/load-selinux-policy.sh.
+[Unit]
+Description=bitra: load the vendor SELinux policy
+DefaultDependencies=no
+# /odm is a link to /android/odm, which mount-android-partitions.service
+# mounts (it is not mounted yet at local-fs.target).
+Wants=mount-android-partitions.service
+After=local-fs.target mount-android-partitions.service
+Before=sysinit.target lxc-android-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bitra/load-selinux-policy.sh

@@ -1,0 +1,18 @@
+# Bring-up aid for realme GT Neo2 (bitra): keep the Android container logcat
+# of the current boot in /userdata/android-logcat.log; the previous boot is
+# kept as android-logcat.log.old. Remove once the port is stable.
+[Unit]
+Description=bitra bring-up: copy the Android logcat to /userdata
+After=lxc-android-config.service
+Requires=lxc-android-config.service
+ConditionPathIsMountPoint=/userdata
+
+[Service]
+Type=simple
+# Rotate once per boot (/run is a tmpfs), not on every restart below.
+ExecStartPre=/bin/sh -c "[ -e /run/bitra-logcat-rotated ] && exit 0; mv -f /userdata/android-logcat.log /userdata/android-logcat.log.old 2>/dev/null; touch /run/bitra-logcat-rotated"
+# Give logd in the container time to come up.
+ExecStart=/bin/sh -c "sleep 30; exec /usr/bin/lxc-attach -n android -- /system/bin/logcat -b all -v threadtime >> /userdata/android-logcat.log 2>&1"
+Restart=always
+RestartSec=5
+Nice=5

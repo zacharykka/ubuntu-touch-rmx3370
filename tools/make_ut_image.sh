@@ -15,6 +15,18 @@ tar -xpzf "$U/dl/ubuntu-touch-android9plus-rootfs-arm64.tar.gz" -C "$STAGE" --nu
 tar -xpJf "$U/dl/h11/halium_halium_arm64.tar.xz" -C "$STAGE" --numeric-owner --strip-components=1 system
 [ -e "$STAGE/var/lib/lxc/android/system.img" ] && mv "$STAGE/var/lib/lxc/android/system.img" "$STAGE/var/lib/lxc/android/android-rootfs.img"
 cp -a "$OVL"/. "$STAGE"/
+# The vendor init.qcom.usb.rc would configure the USB gadget from inside the
+# Android container and take the controller away from usb-moded. Bind an empty
+# file over it (the file comes from the overlay).
+LXC_CFG=$STAGE/var/lib/lxc/android/config
+grep -q no-usb-init.rc "$LXC_CFG" || cat >> "$LXC_CFG" <<'ENTRY'
+
+# bitra bring-up: the Android side creates /config/usb_gadget/g1 (mass_storage,
+# product "Kona for arm64") which steals the USB device controller from
+# usb-moded, so the Ubuntu side can expose no ECM/adb interface. Neutralise the
+# whole file instead of patching every property trigger in it.
+lxc.mount.entry = /var/lib/lxc/android/no-usb-init.rc vendor/etc/init/hw/init.qcom.usb.rc none bind,ro,create=file 0 0
+ENTRY
 chmod 755 "$STAGE"
 
 rm -f "$OUT/ubuntu.img"

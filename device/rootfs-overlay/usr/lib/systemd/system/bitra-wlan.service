@@ -1,0 +1,15 @@
+# realme GT Neo2 (bitra): load the QCA6390 WLAN driver once the Android
+# container is up. See /usr/libexec/bitra/wlan-on.sh.
+[Unit]
+Description=bitra: bring up the QCA6390 WLAN driver
+After=lxc-android-config.service
+Wants=lxc-android-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bitra/wlan-on.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
