@@ -1,0 +1,15 @@
+# realme GT Neo2 (RMX3370, bitra).
+# device-info reads every file in /etc/deviceinfo/devices and matches the
+# Halium device name, which it takes from ro.product.vendor.device ("kona" on
+# this vendor), against the top-level key or the Names list.
+kona:
+  Names:
+    - kona
+  PrettyName: realme GT Neo2
+  DeviceType: phone
+  GridUnit: 21
+  PrimaryOrientation: Portrait
+  # ofonod-wrapper loads ofono-binder-plugin only when this is "binder".
+  # Without it ofono uses the legacy RIL socket plugin, which cannot talk to
+  # the HIDL qcrild of this Android 11 vendor, and exports no modems.
+  OfonoPlugin: binder
