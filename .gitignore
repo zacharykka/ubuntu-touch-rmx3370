@@ -1,0 +1,14 @@
+# Track only the port's own sources. Everything else in this directory is
+# downloaded or generated (see README.md), and kernel-src/ is a separate git
+# repository.
+/*
+!/.gitignore
+!/README.md
+!/env.sh
+!/device/
+!/patches/
+!/tools/
+# build products of tools/mnttest/*.c
+/tools/mnttest/mnttest
+/tools/mnttest/rebootbl
+__pycache__/

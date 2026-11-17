@@ -1,0 +1,41 @@
+From e1ef14fe5de82900ffd273f15e5e3cd0a113f88e Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Mon, 16 Nov 2026 10:46:37 +0800
+Subject: [PATCH 05/13] arm64: configs: halium: drop bpf from the active LSM
+ list
+
+With AppArmor as the major LSM, the BPF LSM no-op stubs end up as the
+only implementation of hooks whose stub default does not match the value
+security.c expects. For inode_setxattr/inode_removexattr this skips
+cap_inode_setxattr(), i.e. the CAP_SYS_ADMIN check for security.* xattrs.
+Ubuntu Touch and the Android container do not use BPF LSM programs, so
+keep CONFIG_BPF_LSM built but inactive.
+---
+ arch/arm64/configs/vendor/halium.config | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/configs/vendor/halium.config b/arch/arm64/configs/vendor/halium.config
+index ff71c1831211..ea68d9d30249 100644
+--- a/arch/arm64/configs/vendor/halium.config
++++ b/arch/arm64/configs/vendor/halium.config
+@@ -45,10 +45,16 @@ CONFIG_VT_CONSOLE=y
+ # in the LSM order wins. The order string is set explicitly because a
+ # two-step "defconfig + fragment" merge would otherwise keep the
+ # selinux-first string computed in the first step.
++# The BPF LSM is deliberately left out of the active list: with AppArmor as
++# the major LSM its no-op stubs become the only implementation of several
++# hooks whose stub default differs from the value security.c expects, e.g.
++# inode_setxattr/inode_removexattr return 0 where 1 is needed to reach the
++# capability check for security.* xattrs. Neither Ubuntu Touch nor the
++# Android container needs BPF LSM programs.
+ # Runtime fallback without a rebuild:  lsm=...  or  security=selinux
+ CONFIG_SECURITY_APPARMOR=y
+ CONFIG_DEFAULT_SECURITY_APPARMOR=y
+-CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo,bpf"
++CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo"
+ CONFIG_SECURITY_SELINUX_BOOTPARAM=y
+ 
+ # --- EROFS with LZ4: stock system/vendor/odm/my_* are LZ4-compressed EROFS ---
+-- 
+2.43.0
+

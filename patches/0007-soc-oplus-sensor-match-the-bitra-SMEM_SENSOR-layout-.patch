@@ -1,0 +1,60 @@
+From da6a56714444d9ec05348fcc48ef490089efa4ec Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Mon, 16 Nov 2026 11:28:04 +0800
+Subject: [PATCH 07/13] soc: oplus: sensor: match the bitra SMEM_SENSOR layout
+ and never overrun it
+
+This tree carries SOURCE_NUM 3 from project 21623, which grows
+struct sensor_info to 6792 bytes. On bitra (21619) the bootloader
+allocates SMEM_SENSOR (item 130) for SOURCE_NUM 2, i.e. 4768 bytes, so
+oplus_devinfo_probe() zeroed 2024 bytes past the item: the header of the
+next item (SMEM_SENSOR_FEEDBACK, 128) and most of its data. That broke
+the global partition walk, so every later lookup of items behind it
+(e.g. SMEM_PROJECT) failed with "Found invalid canary" and the touch
+driver refused to probe (project 0).
+
+Restore SOURCE_NUM 2 as in the official 21619 source, and refuse to
+touch the item when it is smaller than the struct.
+---
+ drivers/soc/oplus/sensor/oplus_sensor_devinfo.c | 6 ++++++
+ drivers/soc/oplus/sensor/oplus_sensor_devinfo.h | 7 ++++++-
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/soc/oplus/sensor/oplus_sensor_devinfo.c b/drivers/soc/oplus/sensor/oplus_sensor_devinfo.c
+index 45d267cc5f94..275111197498 100755
+--- a/drivers/soc/oplus/sensor/oplus_sensor_devinfo.c
++++ b/drivers/soc/oplus/sensor/oplus_sensor_devinfo.c
+@@ -1518,6 +1518,12 @@ static int oplus_devinfo_probe(struct platform_device *pdev)
+ 		return -EPROBE_DEFER; /*return -EPROBE_DEFER if smem not ready*/
+ 	}
+ 
++	if (smem_size < sizeof(struct sensor_info)) {
++		pr_err("%s: SMEM_SENSOR is %zu bytes but struct sensor_info needs %zu, not touching it\n",
++		       __func__, smem_size, sizeof(struct sensor_info));
++		return -EINVAL;
++	}
++
+ 	chip = (struct sensor_info *)(smem_addr);
+ 
+ 	memset(chip, 0, sizeof(struct sensor_info));
+diff --git a/drivers/soc/oplus/sensor/oplus_sensor_devinfo.h b/drivers/soc/oplus/sensor/oplus_sensor_devinfo.h
+index d4807de8ed19..234bef65a86f 100755
+--- a/drivers/soc/oplus/sensor/oplus_sensor_devinfo.h
++++ b/drivers/soc/oplus/sensor/oplus_sensor_devinfo.h
+@@ -26,7 +26,12 @@
+ #define REG_NUM 10
+ #define PARAMETER_NUM 25
+ #define FEATURE_NUM 10
+-#define SOURCE_NUM 3
++/*
++ * Number of alternative parts per sensor slot. This sizes struct sensor_info,
++ * which is a layout contract with the SLPI sensor firmware through SMEM_SENSOR.
++ * bitra (21619) firmware allocates that item for SOURCE_NUM 2 (4768 bytes).
++ */
++#define SOURCE_NUM 2
+ #define ALGO_PARAMETER_NUM 15
+ #define ALGO_FEATURE_NUM  5
+ #define DEFAULT_CONFIG 0xff
+-- 
+2.43.0
+

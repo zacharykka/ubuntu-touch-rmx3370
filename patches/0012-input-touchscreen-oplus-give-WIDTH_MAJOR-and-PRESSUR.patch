@@ -1,0 +1,52 @@
+From b0749834efd3161472c21dbbf092c5da1f4ae58a Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Tue, 17 Nov 2026 09:36:01 +0800
+Subject: [PATCH 12/13] input: touchscreen: oplus: give WIDTH_MAJOR and
+ PRESSURE a range
+
+init_input_device() sets ABS_MT_WIDTH_MAJOR and ABS_MT_PRESSURE in
+absbit, and touch reports send values for both. But only TOUCH_MAJOR,
+POSITION_X and POSITION_Y got input_set_abs_params(), so the other two
+axes reported min == max == 0.
+
+Android's InputReader ignores this. libinput rejects the whole device:
+
+  libinput error: event1 - touchpanel: kernel bug: device has min == max
+  on ABS_MT_WIDTH_MAJOR
+
+Under Ubuntu Touch, lomiri-system-compositor (Mir input-evdev, built on
+libinput) therefore never opened the touchscreen, and the panel could
+not be used even though the driver reported touches.
+
+Both values come from the IC's u8 major field (struct point_info), so
+use the same 0..255 range as TOUCH_MAJOR.
+
+Verified on bitra: libinput now lists touchpanel (event1) with the
+touch capability, lomiri-system-compositor holds event1, and touch
+works in Lomiri.
+---
+ .../oplus_touchscreen/touchpanel_common_driver.c          | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/input/touchscreen/oplus_touchscreen/touchpanel_common_driver.c b/drivers/input/touchscreen/oplus_touchscreen/touchpanel_common_driver.c
+index f8cfda5e95ee..52b92b337c72 100755
+--- a/drivers/input/touchscreen/oplus_touchscreen/touchpanel_common_driver.c
++++ b/drivers/input/touchscreen/oplus_touchscreen/touchpanel_common_driver.c
+@@ -6951,6 +6951,14 @@ static int init_input_device(struct touchpanel_data *ts)
+ 	}
+ #endif
+ 	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
++	/*
++	 * WIDTH_MAJOR and PRESSURE are declared in absbit above and reported
++	 * from the IC's u8 major value, but were never given a range, so the
++	 * kernel exposed min == max == 0. libinput rejects such a device as a
++	 * kernel bug, which leaves the touchscreen unusable outside Android.
++	 */
++	input_set_abs_params(ts->input_dev, ABS_MT_WIDTH_MAJOR, 0, 255, 0, 0);
++	input_set_abs_params(ts->input_dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
+ 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->resolution_info.max_x - 1, 0, 0);
+ 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->resolution_info.max_y - 1, 0, 0);
+ 	input_set_drvdata(ts->input_dev, ts);
+-- 
+2.43.0
+

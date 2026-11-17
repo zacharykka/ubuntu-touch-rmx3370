@@ -1,0 +1,104 @@
+From dda201f418db2a4f46508645884f641a707908ef Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Tue, 17 Nov 2026 09:36:01 +0800
+Subject: [PATCH 11/13] arm64: configs: halium: make SELinux the major LSM
+
+SELinux and AppArmor both carry LSM_FLAG_EXCLUSIVE in this tree, and
+lsm_allowed() initialises only the first exclusive LSM listed in
+CONFIG_LSM. With apparmor listed first, SELinux never initialised and
+selinuxfs was never registered.
+
+The Android container needs SELinux. /vendor/bin/vndservicemanager calls
+selinux_status_open(true) at startup and aborts without selinuxfs:
+
+  Check failed: selinux_status_open(true ) >= 0
+
+On bitra this produced 32 tombstones in a crash loop. The vndbinder
+service table stayed empty, so the QTI composer could not register
+display.qservice, and Mir blocked in the HWC2 client until lightdm
+killed it after 60 s (black screen).
+
+List selinux before apparmor and set DEFAULT_SECURITY_SELINUX.
+SECURITY_SELINUX_DEVELOP keeps the system permissive unless enforcing=1
+is given, which is what bring-up needs.
+
+Cost: AppArmor stays compiled in but is never initialised, so the Ubuntu
+Touch profiles and click app confinement are not enforced. Booting with
+security=apparmor would bring AppArmor back, but it also disables SELinux.
+
+The kernel does not load a policy by itself. Halium replaces Android's
+first-stage init, so userspace has to write the vendor
+precompiled_sepolicy to /sys/fs/selinux/load (this port does that in
+bitra-selinux-policy.service).
+
+Verified on bitra: 44/44 fragment directives present in .config,
+selinuxfs registers, vndservicemanager runs, and Lomiri reaches the
+language selection screen.
+---
+ arch/arm64/configs/vendor/halium.config | 49 ++++++++++++++++++-------
+ 1 file changed, 35 insertions(+), 14 deletions(-)
+
+diff --git a/arch/arm64/configs/vendor/halium.config b/arch/arm64/configs/vendor/halium.config
+index ea68d9d30249..854f15aa25e8 100644
+--- a/arch/arm64/configs/vendor/halium.config
++++ b/arch/arm64/configs/vendor/halium.config
+@@ -40,21 +40,42 @@ CONFIG_CGROUP_PERF=y
+ CONFIG_VT=y
+ CONFIG_VT_CONSOLE=y
+ 
+-# --- LSM: AppArmor is the active major LSM -----------------------------------
+-# AppArmor and SELinux are both LSM_FLAG_EXCLUSIVE here; the first one listed
+-# in the LSM order wins. The order string is set explicitly because a
+-# two-step "defconfig + fragment" merge would otherwise keep the
+-# selinux-first string computed in the first step.
+-# The BPF LSM is deliberately left out of the active list: with AppArmor as
+-# the major LSM its no-op stubs become the only implementation of several
+-# hooks whose stub default differs from the value security.c expects, e.g.
+-# inode_setxattr/inode_removexattr return 0 where 1 is needed to reach the
+-# capability check for security.* xattrs. Neither Ubuntu Touch nor the
+-# Android container needs BPF LSM programs.
+-# Runtime fallback without a rebuild:  lsm=...  or  security=selinux
++# --- LSM: SELinux is the active major LSM -----------------------------------
++# In this tree both SELinux and AppArmor carry LSM_FLAG_EXCLUSIVE
++# (security/selinux/hooks.c, security/apparmor/lsm.c). lsm_allowed() lets only
++# the FIRST exclusive entry in CONFIG_LSM initialise and silently disables any
++# later one, so the order below decides which MAC is live.
++#
++# SELinux must win. The Android container runs /vendor/bin/vndservicemanager,
++# which calls selinux_status_open(true) during startup and abort()s when
++# selinuxfs is missing:
++#     Check failed: selinux_status_open(true ) >= 0
++# Verified on bitra 2026-11-16: with apparmor listed first there is no
++# selinuxfs at all (/proc/filesystems), vndservicemanager crash-looped (32
++# tombstones), the vendor HIDL servicemanager never came up, the display
++# composer never registered its service and Mir blocked in the HWC2 client
++# until lightdm killed it after 60s -> black screen.
++#
++# Cost: AppArmor is compiled in but never initialised, so the Ubuntu Touch
++# profiles in /etc/apparmor.d and click app confinement are not enforced.
++# The container itself runs lxc.apparmor.profile = unconfined either way.
++# Booting with security=apparmor brings AppArmor back but disables SELinux
++# (security= turns off every other legacy-major LSM), which breaks the
++# container again.
++#
++# SELINUX_DEVELOP=y => permissive unless enforcing=1 is given: right for
++# bring-up, and it keeps the container from being killed by an incomplete
++# policy while we still have no working display.
++#
++# The BPF LSM stays out of the list: its no-op stubs change hook defaults
++# (inode_setxattr/inode_removexattr return 0 where 1 is needed to reach the
++# capability check for security.* xattrs).
+ CONFIG_SECURITY_APPARMOR=y
+-CONFIG_DEFAULT_SECURITY_APPARMOR=y
+-CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity,apparmor,selinux,smack,tomoyo"
++CONFIG_SECURITY_SELINUX=y
++CONFIG_SECURITY_SELINUX_DEVELOP=y
++CONFIG_DEFAULT_SECURITY_SELINUX=y
++# CONFIG_DEFAULT_SECURITY_APPARMOR is not set
++CONFIG_LSM="lockdown,yama,loadpin,safesetid,integrity,selinux,smack,tomoyo,apparmor"
+ CONFIG_SECURITY_SELINUX_BOOTPARAM=y
+ 
+ # --- EROFS with LZ4: stock system/vendor/odm/my_* are LZ4-compressed EROFS ---
+-- 
+2.43.0
+

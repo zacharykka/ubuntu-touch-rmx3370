@@ -1,0 +1,12 @@
+# Bring-up aid for realme GT Neo2 (bitra): keep the kernel log of the current
+# boot in /userdata/bitra-dmesg.log (journald here does not read kmsg).
+# Remove once the port is stable.
+[Unit]
+Description=bitra bring-up: copy the kernel log to /userdata
+DefaultDependencies=no
+Before=sysinit.target
+ConditionPathIsMountPoint=/userdata
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c "umask 022; exec /usr/bin/dmesg --follow > /userdata/bitra-dmesg.log 2>&1"

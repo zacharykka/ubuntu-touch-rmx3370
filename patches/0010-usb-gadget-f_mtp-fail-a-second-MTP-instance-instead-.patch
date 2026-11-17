@@ -1,0 +1,92 @@
+From 3a429f35ff2577d4e958a6d25ed24dbc7cd37498 Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Mon, 16 Nov 2026 15:50:52 +0800
+Subject: [PATCH 10/13] usb: gadget: f_mtp: fail a second MTP instance instead
+ of crashing
+
+Only one MTP device (/dev/mtp_usb) can exist. When a second mtp.* function
+was created through configfs, __mtp_setup() ran again, misc_register()
+failed with -EBUSY and the error path set _mtp_dev to NULL underneath the
+first, still-live instance. A following ptp.* mkdir then dereferenced the
+NULL device in alloc_inst_mtp_ptp():
+
+  Unable to handle kernel NULL pointer dereference at virtual address 0..b90
+  pc : __mutex_init+0x4/0x1c
+  lr : alloc_inst_mtp_ptp+0x250/0x2f8
+   ptp_alloc_inst+0x14/0x20 ... configfs_mkdir
+
+On Halium this is reached at every boot: usb-moded creates mtp.mtp on the
+Ubuntu side and the vendor init.qcom.usb.rc in the Android container then
+creates mtp.gs0 and ptp.gs1.
+
+- refuse a second MTP instance with -EBUSY before touching any state
+- refuse a PTP instance when no MTP device exists
+- only the creating (MTP) instance initialises and tears down the device;
+  freeing a PTP instance no longer destroys the shared device
+---
+ drivers/usb/gadget/function/f_mtp.c | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/usb/gadget/function/f_mtp.c b/drivers/usb/gadget/function/f_mtp.c
+index ea0ab2654bd6..85451095788a 100755
+--- a/drivers/usb/gadget/function/f_mtp.c
++++ b/drivers/usb/gadget/function/f_mtp.c
+@@ -390,6 +390,7 @@ struct mtp_instance {
+ 	struct usb_function_instance func_inst;
+ 	const char *name;
+ 	struct mtp_dev *dev;
++	bool owns_dev;	/* created _mtp_dev (MTP); PTP instances only borrow it */
+ 	char mtp_ext_compat_id[16];
+ 	struct usb_os_desc mtp_os_desc;
+ };
+@@ -1743,6 +1744,11 @@ static int __mtp_setup(struct mtp_instance *fi_mtp)
+ 	struct mtp_dev *dev;
+ 	int ret;
+ 
++	if (_mtp_dev) {
++		pr_err("%s: an MTP function instance already exists\n", __func__);
++		return -EBUSY;
++	}
++
+ 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+ 
+ 	if (fi_mtp != NULL)
+@@ -1862,7 +1868,8 @@ static void mtp_free_inst(struct usb_function_instance *fi)
+ 
+ 	fi_mtp = to_fi_mtp(fi);
+ 	kfree(fi_mtp->name);
+-	mtp_cleanup();
++	if (fi_mtp->owns_dev)
++		mtp_cleanup();
+ 	kfree(fi_mtp);
+ }
+ 
+@@ -1891,15 +1898,23 @@ struct usb_function_instance *alloc_inst_mtp_ptp(bool mtp_config)
+ 			pr_err("Error setting MTP\n");
+ 			return ERR_PTR(ret);
+ 		}
+-	} else
++	} else {
++		if (!_mtp_dev) {
++			kfree(fi_mtp);
++			pr_err("Error: create the MTP function before PTP\n");
++			return ERR_PTR(-EINVAL);
++		}
+ 		fi_mtp->dev = _mtp_dev;
++	}
+ 
+ 	config_group_init_type_name(&fi_mtp->func_inst.group,
+ 					"", &mtp_func_type);
+ 	usb_os_desc_prepare_interf_dir(&fi_mtp->func_inst.group, 1,
+ 					descs, names, THIS_MODULE);
+ 
+-	mutex_init(&fi_mtp->dev->read_mutex);
++	if (mtp_config)
++		mutex_init(&fi_mtp->dev->read_mutex);
++	fi_mtp->owns_dev = mtp_config;
+ 
+ 	return  &fi_mtp->func_inst;
+ }
+-- 
+2.43.0
+

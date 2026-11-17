@@ -1,0 +1,32 @@
+From 1cf8b26f129c2dd329257c688f02784de4791b92 Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Mon, 16 Nov 2026 08:22:30 +0800
+Subject: [PATCH 02/13] arm64: dts: kona-v2.1: select project 21619 (realme GT
+ Neo2, bitra)
+
+The OPLUS ABL picks the base DTB by msm-id, board-id and oplus,dtsi_no.
+On RMX3370 eight stock DTBs share msm-id <0x164 0x20001> and
+board-id <0 0>; they differ only in oplus,dtsi_no, and the bootloader
+selects the one carrying 0x5473 (21619). Without this value the ABL
+will not match this base DTB on bitra.
+
+Only kona-v2.1.dts is changed: it is the only kona base built from this
+directory (as the overlay base), and bitra uses SoC revision v2.1.
+---
+ arch/arm64/boot/dts/vendor/21623/kona-v2.1.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/vendor/21623/kona-v2.1.dts b/arch/arm64/boot/dts/vendor/21623/kona-v2.1.dts
+index 2ca9983df64f..1f37ab4b0883 100755
+--- a/arch/arm64/boot/dts/vendor/21623/kona-v2.1.dts
++++ b/arch/arm64/boot/dts/vendor/21623/kona-v2.1.dts
+@@ -6,5 +6,5 @@
+ 	model = "Qualcomm Technologies, Inc. kona v2.1 SoC";
+ 	compatible = "qcom,kona";
+ 	qcom,board-id = <0 0>;
+-	oplus,dtsi_no = <21623 21733>;
++	oplus,dtsi_no = <21619>;
+ };
+-- 
+2.43.0
+

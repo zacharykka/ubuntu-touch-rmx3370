@@ -1,0 +1,66 @@
+From 2c37ccc70a45c3594056cd3929df37352ba90c26 Mon Sep 17 00:00:00 2001
+From: David Ahern <dsahern@gmail.com>
+Date: Wed, 10 Apr 2019 10:05:51 -0700
+Subject: [PATCH 13/13] UPSTREAM: ipv4: Handle RTA_GATEWAY set to 0
+
+Govindarajulu reported a regression with Network Manager which sends an
+RTA_GATEWAY attribute with the address set to 0. Fixup the handling of
+RTA_GATEWAY to only set fc_gw_family if the gateway address is actually
+set.
+
+Fixes: f35b794b3b405 ("ipv4: Prepare fib_config for IPv6 gateway")
+Reported-by: Govindarajulu Varadarajan <govind.varadar@gmail.com>
+Signed-off-by: David Ahern <dsahern@gmail.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit d73f80f921fd323af8f35644fb9f3b129f465f66)
+[ut-bitra: this tree has f35b794b3b405 (as 651aefbed8c0) but was missing
+ this fix. On Ubuntu Touch, NetworkManager 1.46 could not add any IPv4
+ route on wlan0, including the on-link subnet route:
+
+   do-add-ip4-route[type unicast 192.168.3.0/24 dev 23 metric 600 ...
+   scope link ...]: failure 101 (Network is unreachable - Nexthop has
+   invalid gateway)
+
+ With no subnet route, the DHCP default route failed the same way, so
+ WiFi associated and had an address but no IPv4 connectivity. iproute2
+ omits RTA_GATEWAY for such routes, which is why "ip route add" worked.
+ Verified on bitra: NM installs the subnet and default routes, and
+ ping/DNS/HTTP work over wlan0.]
+---
+ net/ipv4/fib_frontend.c  | 3 ++-
+ net/ipv4/fib_semantics.c | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/net/ipv4/fib_frontend.c b/net/ipv4/fib_frontend.c
+index 6950b55df933..b0012f3d60d3 100644
+--- a/net/ipv4/fib_frontend.c
++++ b/net/ipv4/fib_frontend.c
+@@ -755,8 +755,9 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
+ 			break;
+ 		case RTA_GATEWAY:
+ 			has_gw = true;
+-			cfg->fc_gw_family = AF_INET;
+ 			cfg->fc_gw4 = nla_get_be32(attr);
++			if (cfg->fc_gw4)
++				cfg->fc_gw_family = AF_INET;
+ 			break;
+ 		case RTA_VIA:
+ 			has_via = true;
+diff --git a/net/ipv4/fib_semantics.c b/net/ipv4/fib_semantics.c
+index 6db883e957cc..682455e066eb 100644
+--- a/net/ipv4/fib_semantics.c
++++ b/net/ipv4/fib_semantics.c
+@@ -659,8 +659,9 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
+ 				return -EINVAL;
+ 			}
+ 			if (nla) {
+-				fib_cfg.fc_gw_family = AF_INET;
+ 				fib_cfg.fc_gw4 = nla_get_in_addr(nla);
++				if (fib_cfg.fc_gw4)
++					fib_cfg.fc_gw_family = AF_INET;
+ 			} else if (nlav) {
+ 				ret = fib_gw_from_via(&fib_cfg, nlav, extack);
+ 				if (ret)
+-- 
+2.43.0
+

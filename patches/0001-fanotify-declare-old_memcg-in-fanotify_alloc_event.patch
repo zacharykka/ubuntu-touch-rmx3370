@@ -1,0 +1,32 @@
+From 207d282f3abbbe8e83ec5aa239334f109120aaa3 Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Mon, 16 Nov 2026 08:22:11 +0800
+Subject: [PATCH 01/13] fanotify: declare old_memcg in fanotify_alloc_event()
+
+Commit 28293c0845cb ("BACKPORT: mm, memcg: rework remote charging API to
+support nesting") converted fanotify_alloc_event() to the nesting
+set_active_memcg() API but did not declare the local that holds the
+previous memcg, so the file fails to build with CONFIG_FANOTIFY=y:
+
+  fs/notify/fanotify/fanotify.c:163: error: use of undeclared identifier old_memcg
+
+inotify_fsnotify.c received the matching declaration in the same commit.
+---
+ fs/notify/fanotify/fanotify.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/fs/notify/fanotify/fanotify.c b/fs/notify/fanotify/fanotify.c
+index 139e5a363e3d..4e1a827eb852 100644
+--- a/fs/notify/fanotify/fanotify.c
++++ b/fs/notify/fanotify/fanotify.c
+@@ -147,6 +147,7 @@ struct fanotify_event_info *fanotify_alloc_event(struct fsnotify_group *group,
+ {
+ 	struct fanotify_event_info *event = NULL;
+ 	gfp_t gfp = GFP_KERNEL_ACCOUNT;
++	struct mem_cgroup *old_memcg;
+ 
+ 	/*
+ 	 * For queues with unlimited length lost events are not expected and
+-- 
+2.43.0
+
