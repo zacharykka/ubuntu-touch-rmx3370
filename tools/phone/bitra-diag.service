@@ -1,0 +1,22 @@
+# One-shot diagnostics unit for the RAM-boot debugging loop (see README.md, "Debugging loop").
+# Install as /userdata/system-data/etc/systemd/system/bitra-diag.service
+# (mode 644), put the payload in /userdata/diag.sh, and enable it with
+#   ln -s ../bitra-diag.service \
+#     /userdata/system-data/etc/systemd/system/multi-user.target.wants/
+# The payload must live under /userdata: only the writable paths listed in
+# /etc/system-image/writable-paths are bind-mounted from system-data, so a
+# script placed under system-data/etc next to this unit is not visible.
+# End the payload with /userdata/rebootbl to return to fastboot.
+[Unit]
+Description=bitra diagnostics (one-shot payload /userdata/diag.sh)
+After=lxc-android-config.service
+Wants=lxc-android-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /userdata/diag.sh
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
