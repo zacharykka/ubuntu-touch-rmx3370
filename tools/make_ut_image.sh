@@ -14,6 +14,14 @@ rm -rf "$STAGE"; mkdir -p "$STAGE" "$OUT"
 tar -xpzf "$U/dl/ubuntu-touch-android9plus-rootfs-arm64.tar.gz" -C "$STAGE" --numeric-owner
 tar -xpJf "$U/dl/h11/halium_halium_arm64.tar.xz" -C "$STAGE" --numeric-owner --strip-components=1 system
 [ -e "$STAGE/var/lib/lxc/android/system.img" ] && mv "$STAGE/var/lib/lxc/android/system.img" "$STAGE/var/lib/lxc/android/android-rootfs.img"
+# The overlay replaces /usr/bin/aa-exec with a shim that launches click apps
+# unconfined when AppArmor is unavailable (SELinux is the major LSM here, so
+# AppArmor never initialises and the real aa-exec aborts). Keep the original
+# binary as aa-exec.real so the shim can defer to it on a kernel that does have
+# AppArmor. Done at build time to avoid committing the GPL binary to the repo.
+if [ -f "$STAGE/usr/bin/aa-exec" ] && [ ! -e "$STAGE/usr/bin/aa-exec.real" ]; then
+    cp -a "$STAGE/usr/bin/aa-exec" "$STAGE/usr/bin/aa-exec.real"
+fi
 cp -a "$OVL"/. "$STAGE"/
 # The vendor init.qcom.usb.rc would configure the USB gadget from inside the
 # Android container and take the controller away from usb-moded. Bind an empty

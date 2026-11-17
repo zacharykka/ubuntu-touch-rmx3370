@@ -32,15 +32,19 @@ display stack, and callers should understand what that means.
   mobile-style per-app isolation. Treat OpenStore / third-party clicks
   accordingly.
 - **Consequence for launching apps.** `lomiri-app-launch` starts every click
-  app through `aa-exec-click -p <profile> -- <app>`, which ends in
-  `aa-exec -p <profile>`. With AppArmor absent `aa-exec` aborts with "AppArmor
-  interface not available" and the app never execs. The overlay ships a patched
-  `/usr/bin/aa-exec-click` that, when AppArmor is unavailable, drops the
-  `-p <profile>` and execs the app unconfined (all other click environment is
-  still set up). On a kernel with AppArmor enabled the patch is a no-op and apps
-  are confined as before. Restoring the sandbox would require either LSM
-  stacking in the kernel or SELinux policy for the Ubuntu side; the
-  `apparmor-major-lsm` branch tracks the first of those.
+  app through its systemd exec-tool, which runs `aa-exec -p <profile> -- <app>`.
+  With AppArmor absent `aa-exec` aborts with "AppArmor interface not available"
+  and the app never execs, so terminal, OpenStore and the rest fail to launch.
+  The overlay replaces `/usr/bin/aa-exec` with a shim: when AppArmor is
+  unavailable it drops the `-p <profile>` / `-n <ns>` options and execs the app
+  unconfined (all other click environment is still set up); when AppArmor is
+  enabled it defers to the original binary, kept as `/usr/bin/aa-exec.real`
+  (saved at build time by `tools/make_ut_image.sh`, so the GPL binary is not in
+  this repo). The overlay also patches `/usr/bin/aa-exec-click`, which the
+  `desktop-hook` launch path uses, the same way. On a kernel with AppArmor
+  enabled both are no-ops and apps are confined as before. Restoring the sandbox
+  would require either LSM stacking in the kernel or SELinux policy for the
+  Ubuntu side; the `apparmor-major-lsm` branch tracks the first of those.
 
 ## Layout
 
@@ -144,8 +148,9 @@ ext4, so stock Android loses its data. After this, never pick "format data" or
 - The qcacld WLAN driver does nothing until "ON" is written to `/dev/wlan`
   (`bitra-wlan.service`).
 - Click apps launch unconfined because AppArmor is not initialised; the overlay
-  patches `/usr/bin/aa-exec-click` to drop `-p <profile>` in that case. See the
-  "Security model" section.
+  replaces `/usr/bin/aa-exec` (and `/usr/bin/aa-exec-click`) with a shim that
+  drops `-p <profile>` in that case, keeping the original as `aa-exec.real`. See
+  the "Security model" section.
 - The vendor `init.qcom.usb.rc` would take over the USB controller. The lxc
   config binds an empty file over it (see `tools/make_ut_image.sh`).
 - The bootloader picks the DTB by `oplus,dtsi_no` = 21619 and refuses boot

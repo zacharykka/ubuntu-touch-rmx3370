@@ -1,0 +1,24 @@
+#!/bin/bash
+# bitra bring-up shim for /usr/bin/aa-exec.
+# This 4.19 kernel runs SELinux as the major (exclusive) LSM, so AppArmor is
+# never initialised. The real aa-exec aborts with "AppArmor interface not
+# available" whenever a profile is requested, which stops every click app from
+# launching. When AppArmor is unavailable, strip the confinement options and
+# exec the target directly; otherwise defer to the real aa-exec.
+aa_enabled=$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null || true)
+if [ "$aa_enabled" = "Y" ] || [ "$aa_enabled" = "1" ]; then
+    exec /usr/bin/aa-exec.real "$@"
+fi
+# AppArmor unavailable: drop "-p PROFILE" / "-n NS" / confinement flags, then
+# exec whatever remains after the option list (optionally preceded by "--").
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -p|--profile|-n|--namespace) shift 2 ;;
+        -p*|--profile=*|-n*|--namespace=*) shift ;;
+        -i|--immediate|-v|--verbose|-d|--debug) shift ;;
+        --) shift; break ;;
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+exec "$@"
