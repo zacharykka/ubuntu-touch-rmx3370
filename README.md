@@ -176,6 +176,14 @@ the resulting backtrace:
    and segfaults. That is the `Segmentation fault` after
    `virtual QSGVideoNode* ShaderVideoNodePlugin::createNode(...)`.
 
+The immediate cause is structural: `libhaliumqsgcontext.so` implements only
+`QSGContextFactoryInterface`, and `libshadervideonode.so` is the **only**
+`QSGVideoNodeFactoryInterface` on the image. So every video path falls back to
+the generic shader video node, which cannot consume a hybris graphic buffer, and
+there is no halium-aware video-node factory to pick instead. No environment
+variable changes that; it needs a halium video-node plugin that does not exist
+here yet.
+
 Upstream of all this, CamX does open the camera: `CameraService::connect
 (hybris, camera 0)` then `Camera 0: Opened`, and 110 ms later
 `notifyError: Error condition 0` (`CAMERA3_MSG_ERROR_DEVICE`) followed by
