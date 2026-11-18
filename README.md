@@ -9,9 +9,10 @@ nothing is flashed.
 | Works | Not yet |
 |---|---|
 | boot to Lomiri, display | audio, modem and calls, sensors |
-| touch | USB networking and adb while Ubuntu Touch runs |
-| WiFi, IPv4 and IPv6 | AppArmor confinement (SELinux is the major LSM) |
+| touch | AppArmor confinement (SELinux is the major LSM) |
+| WiFi, IPv4 and IPv6 | |
 | click apps launch (terminal, camera, OpenStore, ...) | |
+| mtp + adb on boot (usb-moded default mode) | |
 
 ## Security model
 
