@@ -9,10 +9,12 @@ nothing is flashed.
 | Works | Not yet |
 |---|---|
 | boot to Lomiri, display | audio, modem and calls, sensors |
-| touch | AppArmor confinement (SELinux is the major LSM) |
-| WiFi, IPv4 and IPv6 | |
-| click apps launch (terminal, camera, OpenStore, ...) | |
+| touch | camera and flash from the camera app |
+| WiFi, IPv4 and IPv6 | AppArmor confinement (SELinux is the major LSM) |
+| click apps launch (terminal, OpenStore, ...) | |
 | mtp + adb on boot (usb-moded default mode) | |
+| rear flash via the power menu Flashlight switch | |
+| adb survives USB drops (see below) | |
 
 ## Security model
 
@@ -136,6 +138,104 @@ ext4, so stock Android loses its data. After this, never pick "format data" or
 - To check which files on the phone differ from a build, run
   `tools/rootfs_manifest.sh` on the mounted `ubuntu.img` on both sides and
   diff the output (it works with busybox).
+
+## Camera and flashlight
+
+The rear flash works from the power menu's **Flashlight** switch. That path does
+not go through the camera at all: `ayatana-indicator-power` probes
+`/sys/class/leds/led:torch_0` plus `led:switch_0` by itself and drives them in
+the two steps `qpnp-flash-led-v2` needs (a current on the torch node, then 1 on
+the paired switch, whose `qcom,led-mask = 0x1` enables fnode 0). The only thing
+missing was permission: the kernel exposes those `brightness` files as
+root:root 0644, so the indicator's `fopen(..., "w")` got EACCES and
+`toggle_flashlight_action_qcom()` returned 0 *silently* — the switch looked
+dead and nothing was logged. `bitra-torch-perms.service` chgrp/chmods the two
+nodes to `plugdev` 0660 (phablet is already in that group).
+
+Do not add `FlashlightSysfsPath` to `/etc/deviceinfo/devices/kona.yaml` without
+a matching `FlashlightSwitchPath`: a path without a switch drops the backend to
+SIMPLE, which writes a single value and never powers the LED.
+
+**The camera app still crashes, and it is not a camera-HAL bug.** The chain,
+confirmed by replaying the real launcher environment (77 variables) and reading
+the resulting backtrace:
+
+1. `ViewFinderView.qml` attaches `VideoOutput { source: camera }`, which asks
+   for a video node as soon as the viewfinder starts.
+2. `camera.supportedViewfinderResolutions()` returns an empty list — the QML
+   logs `updateViewfinderResolution: viewfinder resolutions is not known yet.`
+   on every pass (`ViewFinderOverlay.qml:161`).
+3. That list comes from `libcamera.so.1` (the hybris camera shim) calling
+   `android_camera_enumerate_supported_preview_sizes`, which gets nothing back
+   from CamX.
+4. This device has exactly one video-node factory,
+   `qt5/plugins/video/videonode/libshadervideonode.so`; `libhaliumqsgcontext.so`
+   is a scene-graph *context*, not a video-node factory, so there is no
+   alternative to fall back to.
+5. `ShaderVideoNodePlugin::createNode()` is handed the resulting invalid format
+   and segfaults. That is the `Segmentation fault` after
+   `virtual QSGVideoNode* ShaderVideoNodePlugin::createNode(...)`.
+
+Upstream of all this, CamX does open the camera: `CameraService::connect
+(hybris, camera 0)` then `Camera 0: Opened`, and 110 ms later
+`notifyError: Error condition 0` (`CAMERA3_MSG_ERROR_DEVICE`) followed by
+`CamX flush()`. So open() succeeds and the first configure fails inside CamX,
+which is why no preview size ever reaches Qt.
+
+Camera 0 is the **s5kgw1** (64MP Samsung GW1), not the imx471: ODM
+`CameraHWConfiguration.config`, `camera_engmode.xml` and the runtime metadata
+(activeArray 4608x3456, 7.3728x5.5296 mm) all agree. In the kernel the chip-id
+dispatch is `0x971 = s5kgw1`, `0x471 = imx471`, `0x4608 = hi846`,
+`0x2b = ov02b`, so probe slot 0 is the main wide sensor and the mapping is
+self-consistent. Reason about camera 0 against s5kgw1.
+
+Do **not** diagnose this by exec'ing the binary with a hand-built environment:
+without `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4096` libhybris dies with
+`cannot allocate memory in static TLS block`, and a bare launch aborts in
+`ContentHub`/`libertine` (`liblibertine` reports with `g_error()`), which is a
+completely different crash. `/userdata/dbg/cam-real.sh` replays the real
+environment and reproduces the real fault.
+
+Useful knobs, all verified to work: the CamX log masks are
+`persist.camera.logVerboseMask` / `logInfoMask` / `logWarningMask` (unprefixed —
+the `persist.vendor.camera.*` spelling is read by nothing), and CHI has its own
+`persist.camera.OverrideLogLevels`. They are read at process start, so the
+camera provider must be restarted. Capture immediately afterwards: the logcat
+ring buffers are 256 KiB each. Note that
+`setprop ctl.restart vendor.camera-provider-2-4` can leave the provider stuck in
+`stopping` with the process still alive; `kill -9` the provider and init starts
+a fresh one.
+
+## USB drops and adb
+
+adb goes offline in two shapes, and they need different fixes.
+
+*Shape B — the gadget leaves the bus.* The phone disappears from the host's USB
+bus. `bitra-usb-recover.timer` checks every 30 s and, when
+`power_supply/usb/present` is 1 while the gadget is no longer attached to the
+UDC across two consecutive samples, restarts usb-moded. It stays quiet for the
+first 90 s after boot and at most once per 120 s. Verified by unbinding the
+gadget by hand: the timer noticed and the phone came back on the bus.
+
+*Shape A — the gadget is fine, the transport is dead.* adbd still holds its
+endpoints, the UDC says `configured`, and everything on the phone looks healthy,
+while the host keeps listing the device as `offline`. The device cannot see
+this: it is the host's adb server that has stalled. `adb kill-server` clears it;
+`tools/host/adb-watch.sh` does that automatically. It is deliberately not
+installed as a login item — run it when you want it. Do **not** use a bare
+`systemctl restart adbd` to recover: that de-enumerated the phone from the bus
+entirely in testing.
+
+adbd also used to die of SIGSEGV. Both crashes in the boot where it happened
+were preceded by `dwc3 a600000.dwc3: request ... was not queued to ep0out` from
+the `adbd auth` thread, and only boots that exercised host-key authentication
+showed any. The port runs with `ADBD_SECURE=0`
+(`adbd.service.d/60-bitra-no-secure.conf`); the same disturbance is then handled
+by the UsbFfs worker thread and adbd survives it. Verification adds nothing here
+— `/data/misc/adb/adb_keys` already holds the host key.
+
+The underlying reason the gadget keeps being re-composed is still unknown; both
+mechanisms above recover from it rather than prevent it.
 
 ## Things that are easy to get wrong
 
