@@ -1,0 +1,17 @@
+# realme GT Neo2 (bitra): give the phablet user access to the rear flash LED
+# once the LED class devices exist. See /usr/libexec/bitra/torch-perms.sh.
+#
+# A oneshot unit rather than a udev rule: these are class-only devices with no
+# devnode, and whether udev RUN+= fires for them is not guaranteed, while this
+# is deterministic. Ordered after udev has settled so the nodes are present.
+[Unit]
+Description=bitra: let phablet drive the rear flash LED
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/bitra/torch-perms.sh
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
