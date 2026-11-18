@@ -1,0 +1,10 @@
+# realme GT Neo2 (bitra): re-compose the USB gadget when it leaves the bus.
+# See /usr/libexec/bitra/usb-recover.sh.
+[Unit]
+Description=bitra: recover the USB gadget when it drops off the bus
+After=usb-moded.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bitra/usb-recover.sh
+TimeoutStartSec=120

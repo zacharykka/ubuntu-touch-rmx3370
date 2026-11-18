@@ -1,0 +1,18 @@
+# realme GT Neo2 (bitra): poll for a dropped USB gadget.
+#
+# Polling rather than udev or inotify: the LED-like class-only sysfs nodes do
+# not reliably generate events, inotifywait is not installed, and the condition
+# to detect (a gadget that quietly left the bus while VBUS is still present) has
+# no event source at all. Every 30s is cheap: the script reads three small
+# sysfs files and exits.
+[Unit]
+Description=bitra: poll for a dropped USB gadget
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+Unit=bitra-usb-recover.service
+
+[Install]
+WantedBy=timers.target
