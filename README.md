@@ -156,39 +156,58 @@ Do not add `FlashlightSysfsPath` to `/etc/deviceinfo/devices/kona.yaml` without
 a matching `FlashlightSwitchPath`: a path without a switch drops the backend to
 SIMPLE, which writes a single value and never powers the LED.
 
-**The camera app still crashes, and it is not a camera-HAL bug.** The chain,
-confirmed by replaying the real launcher environment (77 variables) and reading
-the resulting backtrace:
+**The camera preview crash is fixed, and it was not a camera-HAL bug.** It was a
+missing BufferQueue in libhybris' own decoding service.
 
-1. `ViewFinderView.qml` attaches `VideoOutput { source: camera }`, which asks
-   for a video node as soon as the viewfinder starts.
-2. `camera.supportedViewfinderResolutions()` returns an empty list — the QML
-   logs `updateViewfinderResolution: viewfinder resolutions is not known yet.`
-   on every pass (`ViewFinderOverlay.qml:161`).
-3. That list comes from `libcamera.so.1` (the hybris camera shim) calling
-   `android_camera_enumerate_supported_preview_sizes`, which gets nothing back
-   from CamX.
-4. This device has exactly one video-node factory,
-   `qt5/plugins/video/videonode/libshadervideonode.so`; `libhaliumqsgcontext.so`
-   is a scene-graph *context*, not a video-node factory, so there is no
-   alternative to fall back to.
-5. `ShaderVideoNodePlugin::createNode()` is handed the resulting invalid format
-   and segfaults. That is the `Segmentation fault` after
-   `virtual QSGVideoNode* ShaderVideoNodePlugin::createNode(...)`.
+The crash was a SIGSEGV in `android::ConsumerBase::ConsumerBase()` in
+`/android/system/lib64/libgui.so` (`+0x885b4`, `ldr x8,[x0]` with `x0 = 0`), a
+virtual call on a NULL `IGraphicBufferConsumer`. The NULL comes from:
 
-The immediate cause is structural: `libhaliumqsgcontext.so` implements only
-`QSGContextFactoryInterface`, and `libshadervideonode.so` is the **only**
-`QSGVideoNodeFactoryInterface` on the image. So every video path falls back to
-the generic shader video node, which cannot consume a hybris graphic buffer, and
-there is no halium-aware video-node factory to pick instead. No environment
-variable changes that; it needs a halium video-node plugin that does not exist
-here yet.
+1. `DecodingService::getIGraphicBufferConsumer()` in
+   `libmedia_compat_layer.so` (source `vendor/halium/libhybris/compat/media/`)
+   reads the consumer member and writes it to the out-parameter, then
+   **returns `OK` even when the member is NULL**.
+2. That member is only ever populated by
+   `DecodingService::createBufferQueue()` (producer at `this+0x28`, consumer at
+   `this+0x30`).
+3. **Nothing in this GSI calls `createBufferQueue()`** — the whole `.text` has
+   zero call sites and `instantiate()` contains no branch to it. Upstream has
+   the call; this binary does not.
+4. `HybrisVideoSink` therefore hands a NULL consumer to
+   `gl_consumer_create_by_id_with_igbc()`, which builds `GLConsumer(NULL)`, and
+   the constructor above dereferences it.
 
-Upstream of all this, CamX does open the camera: `CameraService::connect
-(hybris, camera 0)` then `Camera 0: Opened`, and 110 ms later
-`notifyError: Error condition 0` (`CAMERA3_MSG_ERROR_DEVICE`) followed by
-`CamX flush()`. So open() succeeds and the first configure fails inside CamX,
-which is why no preview size ever reaches Qt.
+The fix is `usr/lib/bitra/libbitra-camera-preview-fix.so` (source next to it),
+preloaded through `/etc/environment`. It intercepts
+`gl_consumer_create_by_id_with_igbc()` and, when the wrapper's consumer slot is
+NULL, builds a real queue with libgui's exported
+`android::BufferQueue::createBufferQueue()` and stores the consumer before
+forwarding. `sp<T>` is a single pointer, so one 8-byte slot stands in for each
+`sp<>`.
+
+`media-hub` must **not** preload it. The shim builds one queue per call and
+media-hub would share a single queue across every sink; the viewfinder and the
+recorder then contend for it, `media-hub.service` dies with
+`Main process exited, code=killed, status=11/SEGV`, and recording takes the
+camera app down with it. Hence
+`usr/lib/systemd/user/media-hub.service.d/50-bitra-no-camera-fix.conf`, which
+sets `LD_PRELOAD` back to `libtls-padding.so` alone. Photographing never hit
+that because it uses only one stream.
+
+Two dead ends, recorded so they are not retried:
+
+- `libminisf.so` (fake SurfaceFlinger) is unrelated. It only provides a fake
+  `ISurfaceComposer` and starts the binder thread pool; it has nothing to do
+  with `IGraphicBufferConsumer`. Rebuilding Halium for it fixes nothing here.
+- `android_camera_set_preview_texture()` is not on the crash path — it is never
+  called in the app process.
+
+The camera HAL and the kernel camera stack are healthy. A bare `Camera {}` with
+no `VideoOutput` runs indefinitely with `cameraState=2` and a valid
+`viewfinder.resolution` of 1920x1440, and the HAL does report
+`preview-size-values`. The empty
+`supportedViewfinderResolutions()` seen in the old crash logs was a consequence
+of the client being torn down, not a cause.
 
 Camera 0 is the **s5kgw1** (64MP Samsung GW1), not the imx471: ODM
 `CameraHWConfiguration.config`, `camera_engmode.xml` and the runtime metadata
@@ -213,6 +232,12 @@ ring buffers are 256 KiB each. Note that
 `setprop ctl.restart vendor.camera-provider-2-4` can leave the provider stuck in
 `stopping` with the process still alive; `kill -9` the provider and init starts
 a fresh one.
+
+Note that CamX's verbose output is stripped from this release vendor build and
+`/data/vendor/camera/camxoverridesettings.txt` is **never read** — CamX only
+looks at `/vendor/etc/camera/` and `./camxoverridesettings.txt`, both
+unwritable (`/vendor` is erofs, `/` is read-only). Use logcat's Android-side
+`Camera2-Parameters`, `Camera2Client` and `CamX` tags instead.
 
 ## USB drops and adb
 

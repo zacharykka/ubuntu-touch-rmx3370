@@ -1,3 +1,12 @@
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin"
 ANDROID_ROOT=/android
 ANDROID_DATA=/android/data
+
+# bitra: camera preview fix. libhybris' DecodingService never calls its own
+# createBufferQueue() in this GSI, so DecodingService::getIGraphicBufferConsumer()
+# returns SUCCESS while writing a NULL IGraphicBufferConsumer. HybrisVideoSink
+# passes that NULL into GLConsumer, and android::ConsumerBase's constructor in
+# libgui.so dereferences it (SIGSEGV). Any QML VideoOutput bound to a Camera died
+# about 2 s after start. The preloaded library supplies a real BufferQueue when
+# the consumer is missing. See usr/lib/bitra/libbitra-camera-preview-fix.c.
+LD_PRELOAD="/usr/lib/aarch64-linux-gnu/libtls-padding.so:/usr/lib/bitra/libbitra-camera-preview-fix.so"
