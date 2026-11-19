@@ -1,7 +1,7 @@
 From 195ac8bd6f0b1eff99f23e803122a4d2418ed52b Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 11:42:44 +0800
-Subject: [PATCH 09/13] Revert "DEBUG: smem: dump global partition layout
+Subject: [PATCH 09/14] Revert "DEBUG: smem: dump global partition layout
  (temporary, revert)"
 
 This reverts commit 847d5304e9c3f35cc7289c94667897d56fcb5748.

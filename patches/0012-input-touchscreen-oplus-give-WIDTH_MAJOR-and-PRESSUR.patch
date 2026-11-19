@@ -1,7 +1,7 @@
 From b0749834efd3161472c21dbbf092c5da1f4ae58a Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Tue, 17 Nov 2026 09:36:01 +0800
-Subject: [PATCH 12/13] input: touchscreen: oplus: give WIDTH_MAJOR and
+Subject: [PATCH 12/14] input: touchscreen: oplus: give WIDTH_MAJOR and
  PRESSURE a range
 
 init_input_device() sets ABS_MT_WIDTH_MAJOR and ABS_MT_PRESSURE in

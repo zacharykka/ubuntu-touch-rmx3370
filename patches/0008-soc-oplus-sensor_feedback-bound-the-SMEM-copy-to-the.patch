@@ -1,7 +1,7 @@
 From ec807a7367591618d03e67e3c2881e89463ba93e Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 11:28:05 +0800
-Subject: [PATCH 08/13] soc: oplus: sensor_feedback: bound the SMEM copy to the
+Subject: [PATCH 08/14] soc: oplus: sensor_feedback: bound the SMEM copy to the
  destination size
 
 read_data_from_share_mem() copies the firmware-reported item size into a

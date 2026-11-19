@@ -1,7 +1,7 @@
 From e1ef14fe5de82900ffd273f15e5e3cd0a113f88e Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 10:46:37 +0800
-Subject: [PATCH 05/13] arm64: configs: halium: drop bpf from the active LSM
+Subject: [PATCH 05/14] arm64: configs: halium: drop bpf from the active LSM
  list
 
 With AppArmor as the major LSM, the BPF LSM no-op stubs end up as the

@@ -1,7 +1,7 @@
 From f0dd857052c0ac66d1cdb9970be067ce305d3aef Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 08:23:37 +0800
-Subject: [PATCH 03/13] arm64: configs: add vendor/halium.config for Ubuntu
+Subject: [PATCH 03/14] arm64: configs: add vendor/halium.config for Ubuntu
  Touch on bitra
 
 Fragment merged on top of vendor/kona-perf_defconfig. Enables the systemd,

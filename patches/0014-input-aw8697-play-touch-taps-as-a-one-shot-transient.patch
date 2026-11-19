@@ -1,0 +1,85 @@
+From 3a81d68e1db48b8fb25483d6c96710213618d375 Mon Sep 17 00:00:00 2001
+From: ut-bitra <ut-bitra@localhost>
+Date: Thu, 19 Nov 2026 12:13:36 +0800
+Subject: [PATCH 14/14] input: aw8697: play touch taps as a one-shot transient,
+ not a looping sine
+
+Touch feedback buzzed instead of clicking. The motor itself was fine: state
+returned to 0 within about 20 ms on every tap, so nothing was stuck on. The
+problem was the waveform.
+
+activate_store() calls aw8697_haptic_set_repeat_wav_seq(aw8697,
+AW8697_WAVEFORM_INDEX_SINE_CYCLE) unconditionally, and that helper programs
+WAVSEQ1 = 9 together with WAVLOOP1[seq1] = AW8697_BIT_WAVLOOP_INIFINITELY
+(15 << 0 = 0x0f). So every request played a continuously looping sine that only
+stopped when the hrtimer expired and issued a bare GO=0. There is no brake and
+no decay envelope, and a 10 ms touch measured 24.3 ms of motor drive. What the
+user hears is the mechanical sound of an overdriven looping sine, which is why
+it reads as a hum rather than a click. The index and loop sysfs nodes cannot
+help here: they are overwritten by activate_store before every play.
+
+Split the play path on duration in aw8697_vibrator_work_routine(). At or below
+AW8697_HAPTIC_SHORT_TAP_MS (50 ms) the sequence is started the same way the
+haptic_audio path does it -- RAM_MODE, waveform 8 (TRANSIENT), loop 0 -- so the
+sequence plays once and self-stops, leaving the timer as a backstop rather than
+the thing that cuts the sound. Anything longer keeps the looping sine, so real
+vibrations (alarms, calls, 500 ms requests) behave exactly as before.
+
+Touch sends 10 ms and long vibrations send 500 ms, so the two cases are far
+apart and the threshold is not delicate.
+
+Verified on the device with a 10 ms request: seq1 reads 0x08 with loop 0x00
+after the tap, and a 500 ms request still reads 0x09 with loop 0x0f. Repeated
+taps stay at 0x08/0x00. Touch feedback and long vibration both confirmed
+working by the user.
+---
+ drivers/misc/aw8697_haptic/aw8697.c | 16 +++++++++++++++-
+ drivers/misc/aw8697_haptic/aw8697.h |  5 +++++
+ 2 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/aw8697_haptic/aw8697.c b/drivers/misc/aw8697_haptic/aw8697.c
+index 612dccfbd1ec..092a63e32833 100755
+--- a/drivers/misc/aw8697_haptic/aw8697.c
++++ b/drivers/misc/aw8697_haptic/aw8697.c
+@@ -13318,7 +13318,21 @@ static void aw8697_vibrator_work_routine(struct work_struct *work)
+ 			} else {
+ 				aw8697_haptic_ram_vbat_comp(aw8697, true);
+ 			}
+-            aw8697_haptic_play_repeat_seq(aw8697, true);
++            if (aw8697->duration <= AW8697_HAPTIC_SHORT_TAP_MS) {
++                /* A short tap (touch feedback) must be a one-shot transient.
++                 * The looping sine cycle keeps buzzing for the whole duration
++                 * and is only cut by the timer, which is heard as a hum.
++                 * This mirrors the haptic_audio path: RAM_MODE, transient
++                 * waveform, loop 0 -> the sequence plays once and self-stops. */
++                aw8697_haptic_play_mode(aw8697, AW8697_HAPTIC_RAM_MODE);
++                aw8697_haptic_set_wav_seq(aw8697, 0x00,
++                              AW8697_WAVEFORM_INDEX_TRANSIENT);
++                aw8697_haptic_set_wav_seq(aw8697, 0x01, 0x00);
++                aw8697_haptic_set_wav_loop(aw8697, 0x00, 0x00);
++                aw8697_haptic_start(aw8697);
++            } else {
++                aw8697_haptic_play_repeat_seq(aw8697, true);
++            }
+         } else if(aw8697->activate_mode == AW8697_HAPTIC_ACTIVATE_CONT_MODE) {
+             aw8697_haptic_cont(aw8697);
+         }
+diff --git a/drivers/misc/aw8697_haptic/aw8697.h b/drivers/misc/aw8697_haptic/aw8697.h
+index 17b76f5145b4..9911f0111025 100755
+--- a/drivers/misc/aw8697_haptic/aw8697.h
++++ b/drivers/misc/aw8697_haptic/aw8697.h
+@@ -623,6 +623,11 @@ struct aw8697_que_seq {
+ #define AW8697_WAVEFORM_INDEX_OLD_STEADY           52
+ #define AW8697_WAVEFORM_INDEX_LISTEN_POP           53
+ 
++/* Durations at or below this are treated as a tap (touch feedback) and played
++ * as a one-shot transient instead of the looping sine cycle, which otherwise
++ * hums for the whole duration. Touch sends 10 ms; real vibrations send 500 ms. */
++#define AW8697_HAPTIC_SHORT_TAP_MS                 50
++
+ 
+ enum aw8697_haptic_custom_level {
+     HAPTIC_CUSTOM_LEVEL_WEAK = 0,  // 3V
+-- 
+2.43.0
+

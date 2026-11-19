@@ -1,7 +1,7 @@
 From 3a429f35ff2577d4e958a6d25ed24dbc7cd37498 Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 15:50:52 +0800
-Subject: [PATCH 10/13] usb: gadget: f_mtp: fail a second MTP instance instead
+Subject: [PATCH 10/14] usb: gadget: f_mtp: fail a second MTP instance instead
  of crashing
 
 Only one MTP device (/dev/mtp_usb) can exist. When a second mtp.* function

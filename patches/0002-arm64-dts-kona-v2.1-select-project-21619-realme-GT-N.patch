@@ -1,7 +1,7 @@
 From 1cf8b26f129c2dd329257c688f02784de4791b92 Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 08:22:30 +0800
-Subject: [PATCH 02/13] arm64: dts: kona-v2.1: select project 21619 (realme GT
+Subject: [PATCH 02/14] arm64: dts: kona-v2.1: select project 21619 (realme GT
  Neo2, bitra)
 
 The OPLUS ABL picks the base DTB by msm-id, board-id and oplus,dtsi_no.

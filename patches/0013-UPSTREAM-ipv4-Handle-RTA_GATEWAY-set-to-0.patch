@@ -1,7 +1,7 @@
 From 2c37ccc70a45c3594056cd3929df37352ba90c26 Mon Sep 17 00:00:00 2001
 From: David Ahern <dsahern@gmail.com>
 Date: Wed, 10 Apr 2019 10:05:51 -0700
-Subject: [PATCH 13/13] UPSTREAM: ipv4: Handle RTA_GATEWAY set to 0
+Subject: [PATCH 13/14] UPSTREAM: ipv4: Handle RTA_GATEWAY set to 0
 
 Govindarajulu reported a regression with Network Manager which sends an
 RTA_GATEWAY attribute with the address set to 0. Fixup the handling of

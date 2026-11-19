@@ -1,7 +1,7 @@
 From 847d5304e9c3f35cc7289c94667897d56fcb5748 Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 11:13:55 +0800
-Subject: [PATCH 06/13] DEBUG: smem: dump global partition layout (temporary,
+Subject: [PATCH 06/14] DEBUG: smem: dump global partition layout (temporary,
  revert)
 
 ---

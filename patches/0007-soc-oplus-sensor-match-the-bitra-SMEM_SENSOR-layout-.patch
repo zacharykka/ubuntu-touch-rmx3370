@@ -1,7 +1,7 @@
 From da6a56714444d9ec05348fcc48ef490089efa4ec Mon Sep 17 00:00:00 2001
 From: ut-bitra <ut-bitra@localhost>
 Date: Mon, 16 Nov 2026 11:28:04 +0800
-Subject: [PATCH 07/13] soc: oplus: sensor: match the bitra SMEM_SENSOR layout
+Subject: [PATCH 07/14] soc: oplus: sensor: match the bitra SMEM_SENSOR layout
  and never overrun it
 
 This tree carries SOURCE_NUM 3 from project 21623, which grows
